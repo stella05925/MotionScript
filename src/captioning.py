@@ -451,7 +451,7 @@ def main(coords, save_dir, babel_info=False, simplified_captions=False,
                                                        verbose=verbose)
 
     # list_of_Returned_Results = Motion_Path_Finder(p_interpretations, p_queries)
-    m_interpretations, m_eligibility = infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_queries,
+    m_interpretations, m_eligibility = infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_queries, p_eligibility=p_eligibility,
                                                          request='Low_Level_intptt' if motion_tracking else 'Default',
                                                          verbose=verbose)
 
@@ -495,15 +495,15 @@ def main(coords, save_dir, babel_info=False, simplified_captions=False,
         for m_kind in m_eligibility:
             if m_kind not in set_of_accepted_mkinds:
         #         Turn all the detected motioncodes to uneligible, both spatial and temporal.
-                    for js_id in range(len(m_eligibility[m_kind])):
-                        for m_index in range(len(m_eligibility[m_kind][js_id])):
-                            m_eligibility[m_kind][js_id][m_index] = (torch.tensor(0), torch.tensor(0))
+                for js_id in range(len(m_eligibility[m_kind])):
+                        if isinstance(m_eligibility[m_kind], torch.Tensor): break
+                        m_eligibility[m_kind][js_id] = [(torch.tensor(0), torch.tensor(0)) for _ in m_eligibility[m_kind][js_id]]
 
     if two:
         m_kind = 'proximity'
-        for js_id in range(len(m_eligibility[m_kind])):
-            for m_index in range(len(m_eligibility[m_kind][js_id])):
-                m_eligibility[m_kind][js_id][m_index] = (torch.tensor(1), torch.tensor(1))
+        if m_kind in m_eligibility and not isinstance(m_eligibility[m_kind], torch.Tensor):
+            for js_id in range(len(m_eligibility[m_kind])):
+                m_eligibility[m_kind][js_id] = [(torch.tensor(1), torch.tensor(1)) for _ in m_eligibility[m_kind][js_id]]
 
 
 
@@ -534,10 +534,19 @@ def main(coords, save_dir, babel_info=False, simplified_captions=False,
                                                              m_queries,
                                                              None,
                                                              random_skip,
+                                                             p_queries=p_queries,
                                                              verbose=verbose)
-
+    print(f"DEBUG motioncodes total: {len(motioncodes)}")
+    if motioncodes:
+        print(f"DEBUG first motioncode: {motioncodes[0]}")
+        print(f"DEBUG first motioncode len: {len(motioncodes[0])}")
     binning_details, motioncodes4vis = motioncodes_sanity_check(motioncodes, Time_Bin_Info)
-
+    print(f"DEBUG motioncodes length: {len(motioncodes)}")
+    print(f"DEBUG motioncodes4vis length: {len(motioncodes4vis)}")
+    non_empty = sum(1 for m in motioncodes if len(m) > 0)
+    print(f"DEBUG non-empty motioncodes windows: {non_empty}")
+    if motioncodes:
+        print(f"DEBUG first motioncode window sample: {motioncodes[0][:2] if motioncodes[0] else 'empty'}")
 
     # save
     saved_filepath = os.path.join(save_dir, "posecodes_formated.pt")
@@ -679,7 +688,7 @@ def main4scanline_motioncodes(coords, save_dir, babel_info=False, simplified_cap
                                                        verbose=verbose)
 
     # list_of_Returned_Results = Motion_Path_Finder(p_interpretations, p_queries)
-    m_interpretations, m_eligibility = infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_queries,
+    m_interpretations, m_eligibility = infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_queries, p_eligibility=p_eligibility,
                                                          request='Low_Level_intptt' if motion_tracking else 'Default',
                                                          verbose=verbose)
 
@@ -1174,7 +1183,7 @@ Motion2Pose_map = {
                     # "root_orientation_z":
 #                     Add more mapping between positionals and actions
 }
-def infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_queries,
+def infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_queries, p_eligibility=None,
                       request='Low_Level_intptt', verbose=True):
 
     # init
@@ -1322,7 +1331,7 @@ def infer_motioncodes(coords, p_interpretations, p_queries, sp_queries, m_querie
             total_posecodes += p_elig.shape[1]
         print(f'Total: {total_posecodes} posecodes.')
 
-    return p_interpretations, p_eligibility
+    return m_interpretations, m_eligibility
 
 
 ################################################################################
@@ -1384,6 +1393,7 @@ def add_posecode(data, skipped, p, p_elig_val, random_skip, nb_skipped,
 def add_motioncode(data, skipped, skipped_just_temporal, m, m_elig_val, random_skip, nb_skipped,
                 side_1, body_part_1, side_2, body_part_2, intptt_id,
                 mc_info, extra_verbose=False):
+    print(f"DEBUG add_motioncode: m_elig_val={m_elig_val}, m_elig_val[0]={m_elig_val[0]}, bool={bool(m_elig_val[0])}")
     # always consider rare posecodes (p_elig_val=2),
     # and randomly ignore skippable ones, up to PROP_SKIP_POSECODES,
     # if applying random skip
@@ -1547,7 +1557,7 @@ def format_and_skip_posecodes(p_interpretations, p_eligibility, p_queries, sp_qu
 
 #############################MOTION#####################
 def format_and_skip_motioncodes(m_interpretations, m_eligibility, m_queries, sm_queries,
-                                random_skip, verbose=True, extra_verbose=False):
+                                random_skip, p_queries=None, verbose=True, extra_verbose=False):
     """
     From classification matrices of the posecodes to a (sparser) data structure.
 
@@ -1568,9 +1578,8 @@ def format_and_skip_motioncodes(m_interpretations, m_eligibility, m_queries, sm_
     """
 
     nb_poses = len(m_interpretations[list(m_interpretations.keys())[0]])
-    data = [[] for i in range(nb_poses)] # posecodes that will make it to the description  Todo: fix this for motion.
-    skipped = [[] for i in range(nb_poses)] # posecodes that will be skippe
-    data, skipped = [], []
+    data = []
+    skipped = []
     skipped_just_temporal = []
 
     # Spatial
@@ -1593,7 +1602,7 @@ def format_and_skip_motioncodes(m_interpretations, m_eligibility, m_queries, sm_
         # Counting eligibility from detected motions which might be different
         # from motion code to motion code regarding corresponding pose codes.
         for i in range(len(m_elig)):
-            if m_elig[i] == []: continue
+            if isinstance(m_elig[i], torch.Tensor) or m_elig[i] == []: continue
 
             spatial_elig = torch.stack([x[0] for x in m_elig[i]]) # produce an array of the first element
             nb_eligible_spatial += (spatial_elig > 0).sum().item()
@@ -1603,21 +1612,19 @@ def format_and_skip_motioncodes(m_interpretations, m_eligibility, m_queries, sm_
             nb_eligible_temporal += (temporal_elig > 0).sum().item()
             nb_nonskippable_temporal += (temporal_elig == 2).sum().item()
 
-        for mc in range(len(m_intptt)): # iterate over motioncodes (based on posecodes)  // len because it's a list now
-            if m_intptt[mc] == []: continue
+        for mc in range(len(m_intptt)):
+            if isinstance(m_intptt[mc], torch.Tensor) or m_intptt[mc] == []: continue
             # get the side & body part of the joints involved in the posecode
-            side_1, body_part_1, side_2, body_part_2 = parse_posecode_joints(mc, m_kind, m_queries)
+            side_1, body_part_1, side_2, body_part_2 = parse_posecode_joints(mc, Motion2Pose_map[m_kind], p_queries)
             # format eligible posecodes
-            # for p in range(nb_poses): # iterate over poses frames
             for m in range(len(m_intptt[mc])): # iterate over detected motions.
                 data, skipped, skipped_just_temporal, nb_skipped = add_motioncode(data, skipped, skipped_just_temporal, m,
-                                                m_elig[mc][m],# m_elig[m, mc], since it's not an array
-                                                              # anymore and it's a list we can't use tuples
+                                                m_elig[mc][m],
                                                 random_skip, nb_skipped,
                                                 side_1, body_part_1,
                                                 side_2, body_part_2,
-                                                m_intptt[mc][m], # m_intptt[m, mc].item(), same as m_elig
-                                                mc_info={'m_kind': m_kind, 'mc_index': mc,      # We use this info at the agg-->subject-detection
+                                                m_intptt[mc][m],
+                                                mc_info={'m_kind': m_kind, 'mc_index': mc,
                                                          'focus_body_part': m_queries[m_kind]['focus_body_part'][mc]},
                                                 extra_verbose=extra_verbose)
 
@@ -2097,9 +2104,9 @@ def aggregate_posecodes(posecodes, simplified_captions=False,
                         #   exactly 3 different body parts at stake
                         # - pA, pB and pC have the same, or opposite interpretations
                         #   (eg. "below"/"above" is OK, but "below"/"behind" is not)
-                        s = set([tuple(pA[:2]), tuple(pA[3:]),
-                                tuple(pB[:2]), tuple(pB[3:]),
-                                tuple(pC[:2]), tuple(pC[3:])])
+                        s = set([tuple(pA[:2]), tuple(pA[3:5]),
+                                tuple(pB[:2]), tuple(pB[3:5]),
+                                tuple(pC[:2]), tuple(pC[3:5])])
                         if len(s) == 3 and tuple([None, None]) not in s and \
                             same_posecode_family(pA, pB) and same_posecode_family(pB, pC):
                             transrel_rer_removed +=1 # one posecode will be removed
