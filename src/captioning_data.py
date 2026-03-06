@@ -2002,13 +2002,13 @@ SUPER_motioncodes_REQUIREMENTS = {
 
 # Define the proportion of eligible (non-aggregated) posecodes that can be
 # skipped for description, in average, per pose
-PROP_SKIP_POSECODES = 0.30
+PROP_SKIP_POSECODES = 0.70
 
 
-PROP_SKIP_MOTONCODES_SPATIAL = 0.20 # 0.20
-PROP_SKIP_MOTONCODES_TEMPORAL = 0.20
+PROP_SKIP_MOTONCODES_SPATIAL = 0.85 # 0.20
+PROP_SKIP_MOTONCODES_TEMPORAL = 0.85
 
-PROP_SKIP_TIMECODE  = 0.30
+PROP_SKIP_TIMECODE  = 0.60
 
 # One way to get rid of redundant posecodes is to use ripple effect rules based
 # on statistically frequent pairs and triplets of posecodes. Those were obtained
@@ -2160,8 +2160,8 @@ TEXT_TRANSITIONS = [' while ', ', ', '. ', ' and ', ' with ']
 TEXT_TRANSITIONS_With_TIME = [', ', '. ', ' and ']
 TEXT_TRANSITIONS_PROP = [0.2, 0.2, 0.2, 0.2, 0.2]
 
-SENTENCE_NAX_LENGTH = 30
-PRONOUN_MAX_WORDS = 20
+SENTENCE_NAX_LENGTH = 15
+PRONOUN_MAX_WORDS = 10
 # Specific plural rules
 PLURALIZE = {
     "foot":"feet",

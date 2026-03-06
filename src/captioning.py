@@ -481,7 +481,7 @@ def main(coords, save_dir, babel_info=False, simplified_captions=False,
     # 1. Eligibility Adjustment
     if one:
         set_of_accepted_mkinds = [  'angular',
-                                    'proximity',
+                                    #'proximity',
                                     # 'spatial_relation_x', # no Spatials
                                     # 'spatial_relation_y',
                                     # 'spatial_relation_z',
